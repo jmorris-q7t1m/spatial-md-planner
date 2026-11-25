@@ -1,0 +1,835 @@
+<!--
+  3D Semantic Page Planner
+  Copyright 2026 [Your Name or Organization]
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Semantic Page Planner</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; background: #06080c; font-family: system-ui, -apple-system, sans-serif; color: #dbe4ee; }
+    #webgl-layer, #css3d-layer { position: absolute; inset: 0; }
+    #webgl-layer { pointer-events: none; z-index: 1; }
+    #css3d-layer { z-index: 2; }
+
+    #hud {
+      position: fixed; top: 14px; left: 14px; z-index: 30;
+      background: rgba(9, 13, 22, 0.94); border: 1px solid #243b53;
+      border-radius: 8px; padding: 12px 14px; width: 355px; font-size: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+      transition: transform 0.25s ease;
+    }
+    #hud.collapsed {
+      transform: translateX(calc(-100% - 14px));
+    }
+    #hud #hud-toggle {
+      position: absolute; top: 12px; right: -32px;
+      width: 30px; height: 42px; padding: 0;
+      background: rgba(9, 13, 22, 0.94); color: #7cc4fa;
+      border: 1px solid #243b53; border-left: none;
+      border-radius: 0 6px 6px 0; cursor: pointer; font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #hud #hud-toggle:hover {
+      background: #1e4e8c; color: #fff;
+    }
+
+    .btn-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    #hud button {
+      background: #102a43; color: #7cc4fa; border: 1px solid #2b6cb0;
+      border-radius: 4px; padding: 5px 8px; cursor: pointer; font-size: 11px;
+    }
+    #hud button:hover { background: #1e4e8c; color: #fff; }
+    #hud button.primary { background: #064e3b; border-color: #10b981; color: #a7f3d0; }
+    #hud button.primary:hover { background: #047857; color: #fff; }
+    #status-pill { margin-top: 8px; font-family: monospace; font-size: 11px; color: #00ff88; }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+
+    .sp-page {
+      width: 440px; height: 560px;
+      background: rgba(12, 17, 26, 0.97);
+      border: 2px solid #2d4356; border-radius: 8px;
+      display: flex; flex-direction: column;
+      box-shadow: 0 0 32px rgba(0, 229, 255, 0.12);
+      pointer-events: auto;
+    }
+    .sp-page.focused { border-color: #00e5ff; box-shadow: 0 0 60px rgba(0, 229, 255, 0.45); }
+    .sp-page.pinned { border-top: 3px solid #ffb703; }
+    .sp-page.boundary-bridge {
+      border-color: #c084fc;
+      box-shadow: 0 0 38px rgba(192, 132, 252, 0.35);
+    }
+
+    .sp-page-header {
+      padding: 9px 10px; background: #111927; border-bottom: 1px solid #243b53;
+      cursor: grab; display: flex; justify-content: space-between; align-items: center;
+      font-family: monospace; font-size: 11px; color: #7cc4fa; user-select: none;
+    }
+    .sp-page-header button {
+      background: #1e293b; color: #93c5fd; border: 1px solid #334155;
+      border-radius: 3px; cursor: pointer; font-size: 10px; margin-left: 3px; padding: 2px 5px;
+    }
+    .sp-page-header button:hover { background: #334155; color: #fff; }
+    .sp-page-header button.del-btn { color: #fca5a5; border-color: #7f1d1d; background: #2a1215; }
+    .sp-page-header button.del-btn:hover { background: #dc2626; color: #fff; }
+    .sp-page-header button.add-after-btn { color: #86efac; border-color: #14532d; background: #0f291e; }
+    .sp-page-header button.add-after-btn:hover { background: #16a34a; color: #fff; }
+
+    .sp-page-body {
+      flex: 1; overflow-y: auto; padding: 14px 16px;
+      font-size: 13px; line-height: 1.55; color: #cbd5e1;
+    }
+    .sp-page-body h1, .sp-page-body h2, .sp-page-body h3 { color: #f8fafc; margin: 12px 0 6px; }
+    .sp-page-body pre { background: #080c12; padding: 10px; border-radius: 5px; overflow-x: auto; border: 1px solid #1e293b; color: #93c5fd; font-size: 11.5px; }
+    .sp-page-body table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 11.5px; }
+    .sp-page-body th, .sp-page-body td { border: 1px solid #334155; padding: 6px; text-align: left; }
+    .sp-page-body blockquote { border-left: 3px solid #00e5ff; margin: 8px 0; padding-left: 10px; color: #94a3b8; }
+    .sp-editor {
+      width: 100%; height: 100%; box-sizing: border-box;
+      background: #070a10; color: #a5f3fc; border: none; padding: 12px;
+      font-family: monospace; font-size: 12px; resize: none; outline: none;
+    }
+    .sp-meta-bar {
+      padding: 5px 10px; background: #0b101a; border-top: 1px solid #1e293b;
+      font-family: monospace; font-size: 10px; color: #64748b; display: flex; justify-content: space-between;
+    }
+    .sds-redacted { background: #ef4444; color: #ef4444; padding: 0 4px; border-radius: 2px; }
+    .sds-ticker { color: #fbbf24; font-weight: bold; }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="hud">
+    <button id="hud-toggle" title="Toggle Controls Drawer">◀</button>
+    <strong>3D SEMANTIC PAGE PLANNER</strong><br>
+    <span style="color:#94a3b8">
+      • Orbit: Drag empty space | Zoom: Wheel on empty space<br>
+      • Click Header: Fly in | <b>Shift+Drag Header</b>: Move XY<br>
+      • <b>+Sec</b>: Insert section after | <b>Del</b>: Remove section
+    </span>
+    <hr style="border-color:#1e293b">
+    <div><span class="dot" style="background:#ffffff"></span>X: Explicit Section Citations</div>
+    <div><span class="dot" style="background:#00e5ff"></span>Y: Shared Formulas / Metrics</div>
+    <div><span class="dot" style="background:#ffb703"></span>Z: Shared Domain Concepts</div>
+    <div><span class="dot" style="background:#ff2a55"></span>Red: Threshold Drift Conflict</div>
+    <div><span class="dot" style="background:#c084fc"></span>Purple: External / Rough-Set Links</div>
+
+    <div class="btn-row">
+      <button id="btn-compile-md" class="primary">Compile & Download .md</button>
+      <button id="btn-bind-folder">Bind Local Folder (pages/*.json)</button>
+      <button id="btn-import-md">Import .md / .json</button>
+      <button id="btn-new-page">+ New Section</button>
+      <button id="btn-fit-all">Fit All</button>
+      <button id="btn-auto-layout">Auto-Snap Unpinned</button>
+      <button id="btn-reset-seed" title="Discard browser edits and reload starter cards">Reset to Starter</button>
+      <button id="btn-toggle-rough">External Beams: ON</button>
+    </div>
+    <input type="file" id="file-importer" accept=".md,.json" multiple style="display:none" />
+    <div id="status-pill">Ready</div>
+  </div>
+
+  <div id="webgl-layer"></div>
+  <div id="css3d-layer"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
+
+    // =========================================================================
+    // STARTER CARDS (Replace via Import .md / .json or an external seed script)
+    // =========================================================================
+    const SEEDED_PAGES = [
+      {
+        id: "page_01",
+        order: 0,
+        sec_num: "1",
+        title: "Section 1: Project Overview",
+        version: 1,
+        updated_at: new Date().toISOString(),
+        layout: { x: -560, y: 0, z: 0, pinned: false },
+        markdown: "## Section 1: Project Overview\n\nClick **Edit** on any card to write Markdown, LaTeX math (e.g., $E = mc^2$), tables, or fenced code blocks.\n\n- Explicit references like **Section 2** create white citation beams.\n- Shared metrics (e.g., `1000Hz`, `80%`) create cyan beams.\n- Shared domain keywords (e.g., Architecture, Pipeline, Schema) create gold beams."
+      },
+      {
+        id: "page_02",
+        order: 1,
+        sec_num: "2",
+        title: "Section 2: Core Architecture",
+        version: 1,
+        updated_at: new Date().toISOString(),
+        layout: { x: 0, y: 120, z: 160, pinned: false },
+        markdown: "## Section 2: Core Architecture\n\nThis card connects to **Section 1** via explicit citation and shared terms.\n\n- **Target Rate:** 1000Hz\n- **Warning Threshold:** 80%\n- **Modules:** Architecture, Pipeline, Schema\n\n```js\n// Fenced code blocks render cleanly inside 3D cards\nconst status = \"ready\";\n```"
+      },
+      {
+        id: "page_03",
+        order: 2,
+        sec_num: "3",
+        title: "Section 3: Notes & References",
+        version: 1,
+        updated_at: new Date().toISOString(),
+        layout: { x: 560, y: -80, z: -120, pinned: false },
+        markdown: "## Section 3: Notes & References\n\nUse **Shift+Drag** on a card header to reposition it in XY space, or **-Z / +Z** to adjust depth.\n\n- **Modules:** Architecture, Pipeline, Schema, Interface\n- **Budget Example:** $1,500 (currency values are shielded from LaTeX math mode)"
+      }
+    ];
+
+    // Optional external/precomputed links (e.g., from a Python rough-set or embedding pass)
+    const SEEDED_ROUGH_LINKS = [];
+    let showRoughBeams = true;
+    const STORAGE_KEY = 'semantic_page_planner_v1';
+
+    // =========================================================================
+    // 1. SDS_CORE_PARSER v1.8.2 (Apache 2.0) + CodeFence & Table Support
+    // =========================================================================
+    const SDS_Parser = {
+      renderToElement(md, container) {
+        container.innerHTML = this.render(md);
+        if (window.renderMathInElement) {
+          window.renderMathInElement(container, {
+            delimiters: [
+              { left: "$$", right: "$$", display: true },
+              { left: "$", right: "$", display: false }
+            ],
+            ignoredClasses: ['sds-currency-prot'],
+            throwOnError: false
+          });
+        }
+      },
+      render(text) {
+        if (!text) return "";
+        const self = this, localMathBlocks = [], codeBlocks = [];
+        let output = text.replace(/<!--[\s\S]*?-->/g, '');
+        output = output.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code) => {
+          const esc = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          codeBlocks.push(`<pre><code class="lang-${lang}">${esc}</code></pre>`);
+          return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+        });
+        output = output.replace(/\$(?=\d)/g, '<span class="sds-currency-prot">&#36;</span>');
+        output = output.replace(/\$\$([\s\S]+?)\$\$/g, (m, g1) => {
+          localMathBlocks.push({ math: g1, display: true });
+          return `__MATH_BLOCK_${localMathBlocks.length - 1}__`;
+        });
+        output = output.replace(/\$([^$\s](?:[^$]*[^$\s])?)\$/g, (m, g1) => {
+          if (g1.match(/million|billion|trillion|percent|k\b|m\b|b\b/i)) return m;
+          if (g1.length > 30 && !g1.match(/[+\-*\/=^_\\]/)) return m;
+          localMathBlocks.push({ math: g1, display: false });
+          return `__MATH_BLOCK_${localMathBlocks.length - 1}__`;
+        });
+
+        let finalHtml = "", inList = false, inTable = false;
+        output.split('\n').forEach(line => {
+          const trimmed = line.trim();
+          if (!trimmed) {
+            if (inList) { finalHtml += '</ul>'; inList = false; }
+            if (inTable) { finalHtml += '</tbody></table>'; inTable = false; }
+            return;
+          }
+          if (/^__CODE_BLOCK_\d+__$/.test(trimmed)) {
+            if (inList) { finalHtml += '</ul>'; inList = false; }
+            if (inTable) { finalHtml += '</tbody></table>'; inTable = false; }
+            finalHtml += trimmed; return;
+          }
+          if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+            if (/^\|[\s\-:|]+\|$/.test(trimmed)) return;
+            const cells = trimmed.slice(1, -1).split('|').map(c => self.applyInlineRules(c.trim()));
+            if (!inTable) {
+              finalHtml += '<table><thead><tr>' + cells.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+              inTable = true;
+            } else {
+              finalHtml += '<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>';
+            }
+            return;
+          } else if (inTable) { finalHtml += '</tbody></table>'; inTable = false; }
+
+          const isListItem = trimmed.match(/^[-*]\s/);
+          if (inList && !isListItem) { finalHtml += '</ul>'; inList = false; }
+          if (trimmed.startsWith('#')) {
+            const lvl = (trimmed.match(/^#+/) || ['#'])[0].length;
+            finalHtml += `<h${lvl}>${self.applyInlineRules(trimmed.replace(/^#+\s*/, ''))}</h${lvl}>`;
+          } else if (trimmed.startsWith('>')) {
+            finalHtml += `<blockquote>${self.applyInlineRules(trimmed.replace(/^>\s*/, ''))}</blockquote>`;
+          } else if (isListItem) {
+            if (!inList) { finalHtml += '<ul>'; inList = true; }
+            finalHtml += `<li>${self.applyInlineRules(trimmed.replace(/^[-*]\s/, ''))}</li>`;
+          } else {
+            finalHtml += `<p>${self.applyInlineRules(trimmed)}</p>`;
+          }
+        });
+        if (inList) finalHtml += '</ul>';
+        if (inTable) finalHtml += '</tbody></table>';
+
+        localMathBlocks.forEach((item, i) => {
+          const delim = item.display ? '$$' : '$';
+          finalHtml = finalHtml.replace(`__MATH_BLOCK_${i}__`, `<span class="${item.display ? 'sds-math-block' : 'sds-math-inline'}">${delim}${item.math}${delim}</span>`);
+        });
+        codeBlocks.forEach((blk, i) => { finalHtml = finalHtml.replace(`__CODE_BLOCK_${i}__`, blk); });
+        return finalHtml;
+      },
+      applyInlineRules(t) {
+        return t
+          .replace(/\\(?=<span class="sds-currency-prot">)/g, '')
+          .replace(/\$([A-Z]{1,5})\b/g, '<span class="sds-ticker">$$$1</span>')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+          .replace(/`([^`]+)`/g, '<code>$1</code>')
+          .replace(/\[REDACTED\]/g, '<span class="sds-redacted">XXXXXXXXXX</span>')
+          .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="sds-link" target="_blank">$1</a>');
+      }
+    };
+
+    // =========================================================================
+    // 2. LIGHTWEIGHT 3-AXIS SEMANTIC ANALYZER (USER CONFIG)
+    // =========================================================================
+    const AXIS_2_PATTERNS = {
+      "latex_math": /\$[^$\s][^$]*\$/,
+      "frequency_hz": /\b\d+\s*Hz\b/i,
+      "latency_ms": /\b\d+\s*ms\b/i,
+      "threshold_pct": /\b(\d{2})%\b/
+    };
+
+    const AXIS_3_TERMS = [
+      "Architecture", "Pipeline", "Schema", "Interface", "Module",
+      "Protocol", "Engine", "Runtime", "Storage", "Graph"
+    ];
+
+    function extractSemantics(secNum, md) {
+      const explicitRefs = [...new Set([...md.matchAll(/Section\s+(\d+)/gi)].map(m => m[1]))].filter(n => n !== String(secNum));
+      const metrics = Object.entries(AXIS_2_PATTERNS).filter(([_, rx]) => rx.test(md)).map(([k]) => k);
+      const concepts = AXIS_3_TERMS.filter(term => new RegExp(`\\b${term.replace('-', '\\-')}\\b`, 'i').test(md));
+      const pctValues = [...new Set([...md.matchAll(/\b(\d{2})%\b/g)].map(m => m[1]))].sort();
+      return { explicit_refs: explicitRefs, metrics, concepts, pct_values: pctValues };
+    }
+
+    function computeSemanticLinks(pagesArr) {
+      const links = [];
+      for (let i = 0; i < pagesArr.length; i++) {
+        for (let j = i + 1; j < pagesArr.length; j++) {
+          const a = pagesArr[i], b = pagesArr[j];
+          const sa = a.semantics, sb = b.semantics;
+
+          if (sa.explicit_refs.includes(String(b.sec_num)) || sb.explicit_refs.includes(String(a.sec_num))) {
+            links.push({ source: a.id, target: b.id, axis: 'explicit_ref', warning: null });
+          }
+          const sharedMetrics = sa.metrics.filter(x => sb.metrics.includes(x));
+          if (sharedMetrics.length >= 2) {
+            let warn = null;
+            if (sharedMetrics.includes('threshold_pct') && sa.pct_values.join(',') !== sb.pct_values.join(',')) {
+              warn = `Threshold % mismatch: [${sa.pct_values}] vs [${sb.pct_values}]`;
+            }
+            links.push({ source: a.id, target: b.id, axis: 'metrics', warning: warn });
+          }
+          const sharedConcepts = sa.concepts.filter(x => sb.concepts.includes(x));
+          if (sharedConcepts.length >= 3) {
+            links.push({ source: a.id, target: b.id, axis: 'concepts', warning: null });
+          }
+        }
+      }
+      return links;
+    }
+
+    // =========================================================================
+    // 3. STATE & STORAGE
+    // =========================================================================
+    const statusPill = document.getElementById('status-pill');
+    const setStatus = (msg, color = '#00ff88') => { statusPill.textContent = msg; statusPill.style.color = color; };
+    let boundDirHandle = null;
+
+    function hydratePages(rawPages) {
+      return rawPages.map((p, idx) => {
+        const sem = extractSemantics(p.sec_num, p.markdown);
+        const layout = p.layout || {
+          x: Math.round((idx - rawPages.length / 2) * 540),
+          y: Math.round((sem.metrics.length - 2) * 250),
+          z: Math.round((sem.concepts.length - 3) * 260 * (idx % 2 ? -1 : 1)),
+          pinned: false
+        };
+        return { ...p, order: p.order ?? idx, semantics: sem, layout };
+      });
+    }
+
+    const savedLocal = localStorage.getItem(STORAGE_KEY);
+    let pages = hydratePages(savedLocal ? JSON.parse(savedLocal) : SEEDED_PAGES);
+
+    async function persistPage(page, links) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
+      if (boundDirHandle) {
+        try {
+          const fh = await boundDirHandle.getFileHandle(`${page.id}.json`, { create: true });
+          const w = await fh.createWritable();
+          await w.write(JSON.stringify(page, null, 2));
+          await w.close();
+          const idxFh = await boundDirHandle.getFileHandle('semantic_index.json', { create: true });
+          const iw = await idxFh.createWritable();
+          await iw.write(JSON.stringify({ updated_at: new Date().toISOString(), links }, null, 2));
+          await iw.close();
+          setStatus(`Synced ${page.id}.json to disk`);
+          return;
+        } catch (err) { console.warn(err); }
+      }
+      setStatus(`Saved ${page.id} (v${page.version}) • ${links.length} semantic beams`);
+    }
+
+    async function deletePageFromStorage(pageId, links) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
+      if (boundDirHandle) {
+        try {
+          await boundDirHandle.removeEntry(`${pageId}.json`);
+          const idxFh = await boundDirHandle.getFileHandle('semantic_index.json', { create: true });
+          const iw = await idxFh.createWritable();
+          await iw.write(JSON.stringify({ updated_at: new Date().toISOString(), links }, null, 2));
+          await iw.close();
+          setStatus(`Deleted ${pageId}.json from disk & updated web`, '#fca5a5');
+          return;
+        } catch (err) { console.warn(err); }
+      }
+      setStatus(`Removed ${pageId} (${pages.length} sections remaining)`, '#fca5a5');
+    }
+
+    // =========================================================================
+    // 4. THREE.JS + CSS3D SCENE
+    // =========================================================================
+    const scene = new THREE.Scene();
+    const cssScene = new THREE.Scene();
+    const edgeGroup = new THREE.Group();
+    scene.add(edgeGroup);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 50000);
+    camera.position.set(0, 450, 2800);
+
+    const webglRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    webglRenderer.setSize(window.innerWidth, window.innerHeight);
+    document.getElementById('webgl-layer').appendChild(webglRenderer.domElement);
+
+    const cssRenderer = new CSS3DRenderer();
+    cssRenderer.setSize(window.innerWidth, window.innerHeight);
+    document.getElementById('css3d-layer').appendChild(cssRenderer.domElement);
+
+    const controls = new OrbitControls(camera, cssRenderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxDistance = 25000;
+
+    const cssObjectsById = new Map();
+    let currentLinks = [];
+    let targetCamPos = null, targetLookAt = null;
+
+    const axisPalette = {
+      explicit_ref: 0xffffff,
+      metrics: 0x00e5ff,
+      concepts: 0xffb703,
+      rough_concept: 0xc084fc
+    };
+
+    function fitAllPages() {
+      if (!pages.length) return;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, maxZ = -Infinity;
+      pages.forEach(p => {
+        minX = Math.min(minX, p.layout.x); maxX = Math.max(maxX, p.layout.x);
+        minY = Math.min(minY, p.layout.y); maxY = Math.max(maxY, p.layout.y);
+        maxZ = Math.max(maxZ, p.layout.z);
+      });
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      const span = Math.max(maxX - minX + 900, (maxY - minY + 900) * camera.aspect);
+      const dist = Math.max(1800, span / (2 * Math.tan((camera.fov * Math.PI) / 360)));
+      targetLookAt = new THREE.Vector3(cx, cy, 0);
+      targetCamPos = new THREE.Vector3(cx, cy + 250, maxZ + dist * 0.85);
+    }
+
+    function rebuildEdges() {
+      currentLinks = [
+        ...computeSemanticLinks(pages),
+        ...(showRoughBeams ? SEEDED_ROUGH_LINKS : [])
+      ];
+
+      while (edgeGroup.children.length) {
+        const line = edgeGroup.children.pop();
+        line.geometry.dispose();
+        line.material.dispose();
+      }
+      currentLinks.forEach(link => {
+        const objA = cssObjectsById.get(link.source);
+        const objB = cssObjectsById.get(link.target);
+        if (!objA || !objB) return;
+        const start = objA.position.clone(), end = objB.position.clone();
+        const mid = start.clone().lerp(end, 0.5);
+        mid.z -= 220;
+        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+        const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(32));
+        const color = link.warning ? 0xff2a55 : (axisPalette[link.axis] || 0x888888);
+        const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: link.warning ? 0.95 : 0.48 });
+        edgeGroup.add(new THREE.Line(geo, mat));
+      });
+      return currentLinks;
+    }
+
+    function clearSceneCards() {
+      while (cssScene.children.length) cssScene.remove(cssScene.children[0]);
+      cssObjectsById.clear();
+    }
+
+    async function createSection(afterPage = null) {
+      const title = prompt('New Section Heading (e.g., Section 4: Implementation):');
+      if (!title) return;
+      const secMatch = title.match(/(\d+(?:\.\d+)*)/);
+      const secNum = secMatch ? secMatch[1] : String(pages.length + 1);
+      const uniqueSuffix = Date.now().toString().slice(-4);
+      const id = `page_${secNum.replace(/\./g, '_').padStart(2, '0')}_${uniqueSuffix}`;
+      const md = `## ${title.replace(/^#+\s*/, '')}\n\nWrite section content here...`;
+
+      let newOrder = pages.length;
+      let layout = { x: 0, y: 450, z: 300, pinned: true };
+
+      if (afterPage) {
+        newOrder = (afterPage.order ?? 0) + 0.5;
+        layout = {
+          x: Math.round(afterPage.layout.x + 280),
+          y: Math.round(afterPage.layout.y + 220),
+          z: Math.round(afterPage.layout.z + 240),
+          pinned: true
+        };
+      }
+
+      const newPage = {
+        id, order: newOrder, sec_num: secNum, title, version: 1,
+        updated_at: new Date().toISOString(),
+        semantics: extractSemantics(secNum, md),
+        layout, markdown: md
+      };
+
+      pages.push(newPage);
+      pages.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach((p, idx) => { p.order = idx; });
+      rebuildAll();
+      const links = rebuildEdges();
+      await persistPage(newPage, links);
+
+      targetLookAt = new THREE.Vector3(layout.x, layout.y, layout.z);
+      targetCamPos = new THREE.Vector3(layout.x, layout.y, layout.z + 750);
+    }
+
+    function mountPageCard(page) {
+      const card = document.createElement('div');
+      const bnScore = page.rough_set?.boundary_score || 0;
+      card.className = `sp-page ${page.layout.pinned ? 'pinned' : ''} ${bnScore >= 3 ? 'boundary-bridge' : ''}`;
+      card.style.setProperty('--boundary-score', bnScore);
+
+      card.addEventListener('wheel', e => e.stopPropagation());
+      card.addEventListener('pointerdown', e => { if (!e.shiftKey) e.stopPropagation(); });
+
+      const header = document.createElement('div');
+      header.className = 'sp-page-header';
+      header.innerHTML = `
+        <span class="title-lbl" title="${page.title}">#${(page.order ?? 0) + 1} ${page.id} | v${page.version}</span>
+        <div>
+          <button class="z-minus" title="Push Deeper (-Z)">-Z</button>
+          <button class="z-plus" title="Pull Closer (+Z)">+Z</button>
+          <button class="add-after-btn" title="Insert a new section immediately after this page">+Sec</button>
+          <button class="dl-json" title="Download standalone JSON">.json</button>
+          <button class="edit-btn">Edit</button>
+          <button class="del-btn" title="Delete this section">Del</button>
+        </div>`;
+
+      const body = document.createElement('div');
+      body.className = 'sp-page-body';
+      SDS_Parser.renderToElement(page.markdown, body);
+
+      const metaBar = document.createElement('div');
+      metaBar.className = 'sp-meta-bar';
+      const refreshMeta = () => {
+        const bn = page.rough_set?.boundary_score ?? 0;
+        metaBar.innerHTML = `<span>XYZ: (${Math.round(page.layout.x)}, ${Math.round(page.layout.y)}, ${Math.round(page.layout.z)})</span><span>Metrics:${page.semantics.metrics.length} | Terms:${page.semantics.concepts.length} | BN:${bn}</span>`;
+      };
+      refreshMeta();
+
+      const cssObj = new CSS3DObject(card);
+      cssObj.position.set(page.layout.x, page.layout.y, page.layout.z);
+      cssScene.add(cssObj);
+      cssObjectsById.set(page.id, cssObj);
+
+      const saveDepth = async (dz) => {
+        cssObj.position.z += dz;
+        page.layout = { x: Math.round(cssObj.position.x), y: Math.round(cssObj.position.y), z: Math.round(cssObj.position.z), pinned: true };
+        page.updated_at = new Date().toISOString();
+        card.classList.add('pinned');
+        const links = rebuildEdges();
+        refreshMeta();
+        await persistPage(page, links);
+      };
+      header.querySelector('.z-minus').onclick = e => { e.stopPropagation(); saveDepth(-180); };
+      header.querySelector('.z-plus').onclick = e => { e.stopPropagation(); saveDepth(180); };
+      header.querySelector('.add-after-btn').onclick = e => { e.stopPropagation(); createSection(page); };
+
+      header.querySelector('.dl-json').onclick = e => {
+        e.stopPropagation();
+        const blob = new Blob([JSON.stringify(page, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${page.id}.json`;
+        a.click();
+      };
+
+      header.querySelector('.del-btn').onclick = async e => {
+        e.stopPropagation();
+        if (!confirm(`Delete section "${page.title}" (${page.id})?`)) return;
+        pages = pages.filter(p => p.id !== page.id);
+        pages.forEach((p, idx) => { p.order = idx; });
+        rebuildAll();
+        const links = rebuildEdges();
+        await deletePageFromStorage(page.id, links);
+      };
+
+      let editing = false;
+      const editBtn = header.querySelector('.edit-btn');
+      editBtn.onclick = async e => {
+        e.stopPropagation();
+        if (!editing) {
+          editing = true;
+          editBtn.textContent = 'Save';
+          const ta = document.createElement('textarea');
+          ta.className = 'sp-editor';
+          ta.value = page.markdown;
+          body.innerHTML = '';
+          body.appendChild(ta);
+        } else {
+          const ta = body.querySelector('textarea');
+          if (ta && ta.value !== page.markdown) {
+            page.markdown = ta.value;
+            page.version += 1;
+            page.updated_at = new Date().toISOString();
+            const firstLine = page.markdown.trim().split('\n')[0] || page.title;
+            page.title = firstLine.replace(/^#+\s*|\*\*/g, '').trim();
+            page.semantics = extractSemantics(page.sec_num, page.markdown);
+            header.querySelector('.title-lbl').textContent = `#${(page.order ?? 0) + 1} ${page.id} | v${page.version}`;
+            const links = rebuildEdges();
+            refreshMeta();
+            await persistPage(page, links);
+          }
+          editing = false;
+          editBtn.textContent = 'Edit';
+          SDS_Parser.renderToElement(page.markdown, body);
+        }
+      };
+
+      let dragging = false, startMouse = { x: 0, y: 0 }, startPos = { x: 0, y: 0 };
+      header.addEventListener('pointerdown', e => {
+        if (e.target.tagName === 'BUTTON') return;
+        if (e.shiftKey) {
+          e.stopPropagation();
+          dragging = true;
+          controls.enabled = false;
+          startMouse = { x: e.clientX, y: e.clientY };
+          startPos = { x: cssObj.position.x, y: cssObj.position.y };
+          header.setPointerCapture(e.pointerId);
+        }
+      });
+      header.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        const scale = camera.position.distanceTo(cssObj.position) * 0.0012;
+        cssObj.position.x = startPos.x + (e.clientX - startMouse.x) * scale;
+        cssObj.position.y = startPos.y - (e.clientY - startMouse.y) * scale;
+        rebuildEdges();
+      });
+      header.addEventListener('pointerup', async e => {
+        if (dragging) {
+          dragging = false;
+          controls.enabled = true;
+          header.releasePointerCapture(e.pointerId);
+          page.layout = { x: Math.round(cssObj.position.x), y: Math.round(cssObj.position.y), z: Math.round(cssObj.position.z), pinned: true };
+          page.updated_at = new Date().toISOString();
+          card.classList.add('pinned');
+          const links = rebuildEdges();
+          refreshMeta();
+          await persistPage(page, links);
+        } else if (e.target.tagName !== 'BUTTON') {
+          document.querySelectorAll('.sp-page').forEach(el => el.classList.remove('focused'));
+          card.classList.add('focused');
+          targetLookAt = cssObj.position.clone();
+          targetCamPos = cssObj.position.clone().add(new THREE.Vector3(0, 0, 720));
+        }
+      });
+
+      card.appendChild(header);
+      card.appendChild(body);
+      card.appendChild(metaBar);
+    }
+
+    function rebuildAll() {
+      clearSceneCards();
+      pages.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(mountPageCard);
+      const links = rebuildEdges();
+      setStatus(`Loaded ${pages.length} sections • ${links.length} semantic beams`);
+    }
+
+    // =========================================================================
+    // 5. HUD CONTROLS
+    // =========================================================================
+    const hudEl = document.getElementById('hud');
+    const hudToggle = document.getElementById('hud-toggle');
+    hudToggle.onclick = () => {
+      const isClosed = hudEl.classList.toggle('collapsed');
+      hudToggle.textContent = isClosed ? '▶' : '◀';
+    };
+
+    document.getElementById('btn-compile-md').onclick = () => {
+      const sorted = [...pages].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const blocks = sorted.map((p, idx) => {
+        const meta = JSON.stringify({ id: p.id, order: idx, version: p.version, layout: p.layout });
+        const cleanMd = p.markdown.replace(/^<!--\s*page-meta:[\s\S]*?-->\s*/m, '').trim();
+        return `<!-- page-meta: ${meta} -->\n${cleanMd}`;
+      });
+      const compiled = blocks.join('\n\n\n') + '\n';
+      const blob = new Blob([compiled], { type: 'text/markdown;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'document_compiled.md';
+      a.click();
+      setStatus(`Compiled ${sorted.length} sections -> document_compiled.md`);
+    };
+
+    document.getElementById('btn-bind-folder').onclick = async () => {
+      if (!window.showDirectoryPicker) {
+        alert('Direct folder sync requires a Chromium browser (Chrome/Edge/Brave).');
+        return;
+      }
+      try {
+        boundDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        const links = rebuildEdges();
+        for (const p of pages) {
+          const fh = await boundDirHandle.getFileHandle(`${p.id}.json`, { create: true });
+          const w = await fh.createWritable();
+          await w.write(JSON.stringify(p, null, 2));
+          await w.close();
+        }
+        const idxFh = await boundDirHandle.getFileHandle('semantic_index.json', { create: true });
+        const iw = await idxFh.createWritable();
+        await iw.write(JSON.stringify({ updated_at: new Date().toISOString(), links }, null, 2));
+        await iw.close();
+        setStatus(`Bound folder! Wrote ${pages.length} page_*.json files to disk.`);
+      } catch { setStatus('Folder bind canceled', '#94a3b8'); }
+    };
+
+    const fileInput = document.getElementById('file-importer');
+    document.getElementById('btn-import-md').onclick = () => fileInput.click();
+    fileInput.onchange = async e => {
+      const files = [...e.target.files];
+      if (!files.length) return;
+      if (files.length === 1 && files[0].name.endsWith('.md')) {
+        const txt = await files[0].text();
+        const chunks = txt.split(/(?=(?:<!--\s*page-meta:\s*\{.*?\}\s*-->\s*\n)?^##\s+)/m).map(c => c.trim()).filter(Boolean);
+        pages = hydratePages(chunks.map((chunk, idx) => {
+          let meta = {};
+          const m = chunk.match(/^<!--\s*page-meta:\s*(\{.*?\})\s*-->\s*/);
+          if (m) { try { meta = JSON.parse(m[1]); } catch {} chunk = chunk.slice(m[0].length).trim(); }
+          const title = (chunk.split('\n')[0] || '').replace(/^#+\s*|\*\*/g, '').trim();
+          const secMatch = title.match(/(?:Section\s+|^)(\d+)\b/i);
+          const secNum = secMatch ? secMatch[1] : `0_${idx}`;
+          return {
+            id: meta.id || `page_${secNum.padStart(2, '0')}`,
+            order: meta.order ?? idx,
+            sec_num: secNum,
+            title,
+            version: meta.version || 1,
+            layout: meta.layout || null,
+            markdown: chunk
+          };
+        }));
+      } else {
+        for (const f of files.filter(x => x.name.endsWith('.json'))) {
+          const incoming = JSON.parse(await f.text());
+          if (incoming.id && incoming.markdown) {
+            incoming.semantics = extractSemantics(incoming.sec_num, incoming.markdown);
+            const existingIdx = pages.findIndex(p => p.id === incoming.id);
+            if (existingIdx >= 0) pages[existingIdx] = incoming;
+            else pages.push(incoming);
+          }
+        }
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
+      rebuildAll();
+      fitAllPages();
+      fileInput.value = '';
+    };
+
+    document.getElementById('btn-new-page').onclick = () => createSection(null);
+    document.getElementById('btn-fit-all').onclick = () => fitAllPages();
+    document.getElementById('btn-toggle-rough').onclick = (e) => {
+      showRoughBeams = !showRoughBeams;
+      e.target.textContent = `External Beams: ${showRoughBeams ? 'ON' : 'OFF'}`;
+      rebuildEdges();
+    };
+
+    document.getElementById('btn-auto-layout').onclick = () => {
+      pages.forEach((p, idx) => {
+        if (!p.layout.pinned) {
+          p.layout.x = Math.round((idx - pages.length / 2) * 540);
+          p.layout.y = Math.round((p.semantics.metrics.length - 2) * 250);
+          p.layout.z = Math.round((p.semantics.concepts.length - 3) * 260 * (idx % 2 ? -1 : 1));
+          const obj = cssObjectsById.get(p.id);
+          if (obj) obj.position.set(p.layout.x, p.layout.y, p.layout.z);
+        }
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
+      rebuildEdges();
+      setStatus('Auto-arranged unpinned sections');
+    };
+
+    document.getElementById('btn-reset-seed').onclick = () => {
+      if (!confirm('Discard local browser changes and reload starter cards?')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      pages = hydratePages(SEEDED_PAGES);
+      rebuildAll();
+      fitAllPages();
+    };
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      webglRenderer.setSize(window.innerWidth, window.innerHeight);
+      cssRenderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (targetCamPos && targetLookAt) {
+        camera.position.lerp(targetCamPos, 0.08);
+        controls.target.lerp(targetLookAt, 0.08);
+        if (camera.position.distanceTo(targetCamPos) < 4) { targetCamPos = null; targetLookAt = null; }
+      }
+      controls.update();
+      webglRenderer.render(scene, camera);
+      cssRenderer.render(cssScene, camera);
+    }
+
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        rebuildAll();
+        fitAllPages();
+      }, 100);
+    });
+    animate();
+  </script>
+</body>
+</html>
