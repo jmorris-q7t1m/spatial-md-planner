@@ -1,6 +1,9 @@
 # Semantic Page Planner
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/65aeed98-30f3-4f7c-b44a-85ae5274bae7" alt="3D Spatial Constellation" width="48%" />
+  <img src="https://github.com/user-attachments/assets/a2b58b31-0505-4eae-b46c-c4573bde61a0" alt="3D Spatial Planner" width="48%" />
+</p>
 
-![3D Spatial Constellation](https://github.com/user-attachments/assets/65aeed98-30f3-4f7c-b44a-85ae5274bae7)
 
 A zero-backend, single-file **3D spatial Markdown editor and semantic dependency planner**. Each document section is rendered as a live, scrollable HTML/KaTeX card floating in Three.js (`WebGLRenderer` + `CSS3DRenderer`) space, connected in real time by 3-axis semantic beams.
 
@@ -26,7 +29,10 @@ Built around **SDS_Parser** (`v1.8.2`), it runs offline directly from a local `i
 
 ## Controls
 
-![3D Spatial Constellation HUD](https://github.com/user-attachments/assets/0362c03d-778c-4cae-84db-bc753a90570a)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/0362c03d-778c-4cae-84db-bc753a90570a" alt="3D Spatial Constellation with HUD" width="48%" />
+  <img src="https://github.com/user-attachments/assets/a10fbdc7-05d1-488b-a57c-6ab2b0ef1f3c" alt="3D Spatial Planner with HUD" width="48%" />
+</p>
 
 | Action | Control |
 |---|---|
