@@ -1,5 +1,7 @@
 # Semantic Page Planner
 
+![3D Spatial Constellation](https://github.com/user-attachments/assets/65aeed98-30f3-4f7c-b44a-85ae5274bae7)
+
 A zero-backend, single-file **3D spatial Markdown editor and semantic dependency planner**. Each document section is rendered as a live, scrollable HTML/KaTeX card floating in Three.js (`WebGLRenderer` + `CSS3DRenderer`) space, connected in real time by 3-axis semantic beams.
 
 Built around **SDS_Parser** (`v1.8.2`), it runs offline directly from a local `index.html` file while supporting direct folder sync (`pages/*.json`) and lossless Markdown round-tripping.
@@ -23,6 +25,8 @@ Built around **SDS_Parser** (`v1.8.2`), it runs offline directly from a local `i
    - *Note:* Direct local folder sync (`Bind Local Folder`) uses the File System Access API and requires a Chromium-based browser; `localStorage`, `.json` download/import, and `.md` compilation work in all browsers.
 
 ## Controls
+
+![3D Spatial Constellation HUD](https://github.com/user-attachments/assets/0362c03d-778c-4cae-84db-bc753a90570a)
 
 | Action | Control |
 |---|---|
